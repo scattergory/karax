@@ -27,6 +27,7 @@ type
 type
   RouterData* = ref object ## information that is passed to the 'renderer' callback
     hashPart*: cstring     ## the hash part of the URL for routing.
+    queryString*: cstring  ## The search string, can be used for passing data to karax
 
   KaraxInstance* = ref object ## underlying karax instance. Usually you don't have
                               ## know about this.
@@ -146,6 +147,10 @@ proc applyEvents(n: VNode) =
   let dest = n.dom
   for i in 0..<len(n.events):
     n.events[i][2] = wrapEvent(dest, n, n.events[i][0], n.events[i][1])
+
+proc reapplyEvents(n: VNode) =
+  removeAllEventHandlers(n.dom)
+  applyEvents(n)
 
 proc getVNodeById*(id: cstring; kxi: KaraxInstance = kxi): VNode =
   ## Get the VNode that was marked with ``id``. Returns ``nil``
@@ -401,6 +406,7 @@ proc addPatchV(kxi: KaraxInstance; parent: VNode; pos: int; newChild: VNode) =
 proc moveDom(dest, src: VNode) =
   dest.dom = src.dom
   src.dom = nil
+  reapplyEvents(dest)
   if dest.id != nil:
     kxi.byId[dest.id] = dest
   assert dest.len == src.len
@@ -645,6 +651,7 @@ proc runDiff*(kxi: KaraxInstance; oldNode, newNode: VNode) =
 
 var onhashChange {.importc: "window.onhashchange".}: proc()
 var hashPart {.importc: "window.location.hash".}: cstring
+var queryString {.importc: "window.location.search".}: cstring
 
 proc avoidDomDiffing*(kxi: KaraxInstance = kxi) =
   ## enforce a full redraw for the next redraw operation.
@@ -668,8 +675,16 @@ proc dodraw(kxi: KaraxInstance) =
     return
 
   kxi.rendering = true
-
-  let rdata = RouterData(hashPart: hashPart)
+  
+  var rdata = RouterData()
+  if cstring"?" in hashPart: 
+    let hashSplit = hashPart.split(cstring"?")
+    rdata.hashPart = hashSplit[0]
+    rdata.queryString = join(hashSplit[1..^1], cstring"?")
+  else:
+    rdata.hashPart = hashPart
+    rdata.queryString = queryString
+    
   let newtree = kxi.renderer(rdata)
   inc kxi.runCount
   newtree.id = kxi.rootId
@@ -678,7 +693,7 @@ proc dodraw(kxi: KaraxInstance) =
     let asdom = toDom(newtree, useAttachedNode = true, kxi)
     replaceById(kxi.rootId, asdom)
   else:
-    when not defined(debugKaraxSame):
+    when defined(debugKaraxSame):
       doAssert same(kxi.currentTree, document.getElementById(kxi.rootId))
     let olddom = document.getElementById(kxi.rootId)
     diff(newtree, kxi.currentTree, nil, olddom, kxi)
@@ -692,7 +707,7 @@ proc dodraw(kxi: KaraxInstance) =
     echo ">>>>>>>>>>>>>>"
   applyPatch(kxi)
   kxi.currentTree = newtree
-  when not defined(debugKaraxSame):
+  when defined(debugKaraxSame):
     doAssert same(kxi.currentTree, document.getElementById(kxi.rootId))
 
   if not kxi.postRenderCallback.isNil:
