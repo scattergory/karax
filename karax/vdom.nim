@@ -67,15 +67,6 @@ type
 const
   selfClosing = {area, base, br, col, embed, hr, img, input,
     link, meta, param, source, track, wbr}
-    
-  svgElements = {animate..view}
-  mathElements = {maction..semantics}
-  ## SVG and MathML are technically separate markup languages. This means me might want to treat these elements differently.
-    
-var 
-  svgNamespace* = "http://www.w3.org/2000/svg"
-  mathNamespace* = "http://www.w3.org/1998/Math/MathML"
-  ## Global var settings: defaults are already set up, but may be adjusted in one shot for the user's entire project
 
 type
   EventKind* {.pure.} = enum ## The events supported by the virtual DOM.
